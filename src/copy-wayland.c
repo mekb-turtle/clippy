@@ -1,11 +1,10 @@
-#include "util.h"
 #include "copy-wayland.h"
+#include "util.h"
 
 #include <string.h>
 #include <stdbool.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <errno.h>
 
 #include <wayland-client.h>
 
@@ -85,7 +84,7 @@ void data_source_cancelled(void *d, struct zwlr_data_control_source_v1 *source) 
 	running = false;
 }
 
-int copy_wayland(char *display_name, bool do_fork, bool primary, struct copy_data *data, char **msg) {
+int copy_wayland(char *display_name, bool primary, struct copy_data *data, char **msg, int (*pre_loop_callback)(void *ctx), void *ctx) {
 	struct wl_display *display = wl_display_connect(display_name);
 	if (!display) ERR(2, "Failed to open Wayland display");
 
@@ -126,7 +125,10 @@ int copy_wayland(char *display_name, bool do_fork, bool primary, struct copy_dat
 	else
 		zwlr_data_control_device_v1_set_selection(device, source);
 
-	if (do_fork) FORK();
+	if (pre_loop_callback) {
+		int res = pre_loop_callback(ctx);
+		if (res) return res;
+	}
 
 	while (wl_display_dispatch(display) >= 0) {
 		if (!running) return 0;

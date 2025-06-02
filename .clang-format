@@ -69,3 +69,5 @@ TabWidth: 4
 UseTab: ForIndentation
 SortUsingDeclarations: Never
 SortIncludes: Never
+InsertNewlineAtEOF: true
+KeepEmptyLinesAtEOF: true

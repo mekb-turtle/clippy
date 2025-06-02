@@ -1,7 +1,6 @@
 #ifndef COPY_WAYLAND
 #define COPY_WAYLAND
-#include <stddef.h>
-#include <stdbool.h>
 #include "copy.h"
-int copy_wayland(char *display_name, bool fork, bool primary, struct copy_data *data, char **msg);
+
+int copy_wayland(char *display_name, bool primary, struct copy_data *data, char **msg, int (*pre_loop_callback)(void *ctx), void *ctx);
 #endif

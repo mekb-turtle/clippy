@@ -2,11 +2,12 @@
 #define COPY_H
 #include <stddef.h>
 #include <stdbool.h>
+
 struct copy_data {
 	char *mime;
 	size_t size;
 	void *data;
 };
-int copy(bool fork, bool primary, struct copy_data *data, char **msg);
-#endif
 
+int copy(bool primary, struct copy_data *data, char **msg, int (*pre_loop_callback)(void *ctx), void *ctx);
+#endif
