@@ -1,8 +1,6 @@
 #include "copy.h"
-#include "util.h"
 
 #include <unistd.h>
-#include <errno.h>
 #include <getopt.h>
 #include <stdint.h>
 #include <stdbool.h>

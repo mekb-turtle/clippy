@@ -26,7 +26,7 @@ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 */
 
-#include "protocol/wlr-data-control-unstable-v1-client.h"
+#include "wlr-data-control-unstable-v1-client-protocol.h"
 
 struct wayland_context {
 	struct wl_display *display;
