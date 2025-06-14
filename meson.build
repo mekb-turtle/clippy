@@ -1,4 +1,4 @@
-project('clippy', 'c', version: '0.1', license: 'MPL-2.0', subproject_dir: 'lib')
+project('clippy-example', 'c', version: '0.1', license: 'MPL-2.0', subproject_dir: 'lib')
 
 src = files('example.c')
 

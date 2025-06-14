@@ -1,11 +1,10 @@
-#include "copy.h"
+#include "lib/libclippy/include/copy.h"
 
-#include <unistd.h>
 #include <getopt.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <err.h>
 #include <string.h>
+#include <stdio.h>
 
 extern unsigned char test_png[];
 extern unsigned int test_png_len;
@@ -15,6 +14,7 @@ static char *parent_process = "Parent process";
 
 static int do_fork(void *msg_) {
 	// #define DO_FORK
+	printf("Serving clipboard\n");
 #ifdef DO_FORK
 	char **error_msg = msg_;
 	pid_t pid = fork();
@@ -27,6 +27,7 @@ static int do_fork(void *msg_) {
 }
 
 int main(void) {
+	printf("Starting...\n");
 	char *msg = NULL;
 	if (copy(false,
 	         (struct copy_data[]) {
@@ -37,7 +38,8 @@ int main(void) {
     },
 	         &msg, &do_fork, &msg)) {
 		if (msg == parent_process) return 0;
-		errx(1, "copy: %s", msg);
+		fprintf(stderr, "copy: %s", msg);
+		return 1;
 	}
 
 	return 0;
