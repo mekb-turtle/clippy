@@ -16,10 +16,15 @@ extern unsigned int test_png_len;
 static char *parent_process = "Parent process";
 
 static int do_fork(void *msg_) {
-	char **msg = msg_;
+	// #define DO_FORK
+#ifdef DO_FORK
+	char **error_msg = msg_;
 	pid_t pid = fork();
-	if (pid == -1) ERR(errno, "Failed to fork");
-	if (pid != 0) ERR(1, parent_process);
+	if (pid == -1) ERR_RET(errno, "Failed to fork");
+	if (pid != 0) ERR_RET(1, parent_process);
+#else
+	(void) msg_;
+#endif
 	return 0;
 }
 

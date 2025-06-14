@@ -9,5 +9,5 @@ struct copy_data {
 	void *data;
 };
 
-int copy(bool primary, struct copy_data *data, char **msg, int (*pre_loop_callback)(void *ctx), void *ctx);
+int copy(bool primary, struct copy_data *data, char **error_msg, int (*pre_loop_callback)(void *ctx), void *ctx);
 #endif

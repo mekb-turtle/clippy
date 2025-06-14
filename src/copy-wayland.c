@@ -28,38 +28,38 @@ THIS SOFTWARE.
 
 #include "protocol/wlr-data-control-unstable-v1-client.h"
 
-static struct wl_seat *seat = NULL;
-static uint32_t seat_name;
-
-static struct zwlr_data_control_manager_v1 *data_control_manager = NULL;
-static uint32_t data_control_manager_name;
+struct wayland_context {
+	struct wl_display *display;
+	struct wl_registry *registry;
+	struct zwlr_data_control_device_v1 *device;
+	struct zwlr_data_control_source_v1 *source;
+	struct wl_seat *seat;
+	uint32_t seat_name;
+	struct zwlr_data_control_manager_v1 *dcm;
+	uint32_t dcm_name;
+};
 
 static void registry_global(void *data, struct wl_registry *registry, uint32_t name, const char *interface, uint32_t version) {
-	(void) data;
+	struct wayland_context *c = data;
 	(void) version;
 	// Bind seat and data control manager
 	if (strcmp(interface, "wl_seat") == 0) {
-		seat_name = name;
-		seat = wl_registry_bind(registry, name, &wl_seat_interface, 2);
+		if (c->seat) wl_seat_destroy(c->seat);
+		c->seat_name = name;
+		c->seat = wl_registry_bind(registry, name, &wl_seat_interface, 2);
 	} else if (strcmp(interface, "zwlr_data_control_manager_v1") == 0) {
-		data_control_manager_name = name;
-		data_control_manager = wl_registry_bind(registry, name, &zwlr_data_control_manager_v1_interface, 2);
+		if (c->dcm) zwlr_data_control_manager_v1_destroy(c->dcm);
+		c->dcm_name = name;
+		c->dcm = wl_registry_bind(registry, name, &zwlr_data_control_manager_v1_interface, 2);
 	}
 }
 
 static void registry_global_remove(void *data, struct wl_registry *registry, uint32_t name) {
-	(void) data;
+	struct wayland_context *c = data;
 	(void) registry;
 	(void) name;
-	// Destroy seat and data control manager
-	if (name == seat_name && seat) {
-		wl_seat_destroy(seat);
-		seat = NULL;
-	}
-	if (name == data_control_manager_name && data_control_manager) {
-		zwlr_data_control_manager_v1_destroy(data_control_manager);
-		data_control_manager = NULL;
-	}
+	if (name == c->seat_name && c->seat) wl_seat_destroy(c->seat);
+	if (name == c->dcm_name && c->dcm) zwlr_data_control_manager_v1_destroy(c->dcm);
 }
 
 static bool running = true;
@@ -84,55 +84,67 @@ void data_source_cancelled(void *d, struct zwlr_data_control_source_v1 *source) 
 	running = false;
 }
 
-int copy_wayland(char *display_name, bool primary, struct copy_data *data, char **msg, int (*pre_loop_callback)(void *ctx), void *ctx) {
-	struct wl_display *display = wl_display_connect(display_name);
-	if (!display) ERR(2, "Failed to open Wayland display");
+int copy_wayland(char *display_name, bool primary, struct copy_data *data, char **error_msg, int (*pre_loop_callback)(void *ctx), void *ctx) {
+	int res = 0;
+	struct wayland_context c = {0};
 
-	struct wl_registry *registry = wl_display_get_registry(display);
-	if (!registry) ERR(3, "Failed to open Wayland registry");
+	c.display = wl_display_connect(display_name);
+	if (!c.display) ERR(2, "Failed to open Wayland display");
+
+	c.registry = wl_display_get_registry(c.display);
+	if (!c.registry) ERR(3, "Failed to open Wayland registry");
 
 	static const struct wl_registry_listener registry_listener = {
 	        .global = registry_global,
 	        .global_remove = registry_global_remove,
 	};
-	wl_registry_add_listener(registry, &registry_listener, NULL);
+	wl_registry_add_listener(c.registry, &registry_listener, &c);
 
 	// Wait until requests are processed
-	wl_display_roundtrip(display);
+	wl_display_roundtrip(c.display);
 
-	if (!seat) ERR(4, "Failed to bind to seat interface");
-	if (!data_control_manager) ERR(5, "Failed to bind to seat interface");
+	if (!c.seat) ERR(4, "Failed to bind to seat interface");
+	if (!c.dcm) ERR(5, "Failed to bind to data control manager interface");
 
-	struct zwlr_data_control_device_v1 *device = zwlr_data_control_manager_v1_get_data_device(data_control_manager, seat);
-	if (!device) ERR(6, "Failed to get data device");
+	c.device = zwlr_data_control_manager_v1_get_data_device(c.dcm, c.seat);
+	if (!c.device) ERR(6, "Failed to get data device");
 
-	struct zwlr_data_control_source_v1 *source = zwlr_data_control_manager_v1_create_data_source(data_control_manager);
-	if (!source) ERR(6, "Failed to create data source");
+	c.source = zwlr_data_control_manager_v1_create_data_source(c.dcm);
+	if (!c.source) ERR(7, "Failed to create data source");
 
 	// Offer all MIME types
 	for (struct copy_data *d = data; d->mime && d->data; ++d)
-		zwlr_data_control_source_v1_offer(source, d->mime);
+		zwlr_data_control_source_v1_offer(c.source, d->mime);
 
 	static const struct zwlr_data_control_source_v1_listener data_source_listener = {
 	        .send = data_source_send,
 	        .cancelled = data_source_cancelled,
 	};
-	zwlr_data_control_source_v1_add_listener(source, &data_source_listener, data);
+	zwlr_data_control_source_v1_add_listener(c.source, &data_source_listener, data);
 
 	// Primary or clipboard selection
 	if (primary)
-		zwlr_data_control_device_v1_set_primary_selection(device, source);
+		zwlr_data_control_device_v1_set_primary_selection(c.device, c.source);
 	else
-		zwlr_data_control_device_v1_set_selection(device, source);
+		zwlr_data_control_device_v1_set_selection(c.device, c.source);
 
 	if (pre_loop_callback) {
-		int res = pre_loop_callback(ctx);
-		if (res) return res;
+		res = pre_loop_callback(ctx);
+		if (res) goto cleanup;
 	}
 
-	while (wl_display_dispatch(display) >= 0) {
-		if (!running) return 0;
+	while (wl_display_dispatch(c.display) >= 0) {
+		if (!running) goto cleanup;
 	}
 
-	ERR(5, "Failed to dispatch display");
+	ERR(8, "Failed to dispatch display");
+
+cleanup:
+	if (c.device) zwlr_data_control_device_v1_destroy(c.device);
+	if (c.source) zwlr_data_control_source_v1_destroy(c.source);
+	if (c.seat) wl_seat_destroy(c.seat);
+	if (c.dcm) zwlr_data_control_manager_v1_destroy(c.dcm);
+	if (c.registry) wl_registry_destroy(c.registry);
+	if (c.display) wl_display_disconnect(c.display);
+	return res;
 }

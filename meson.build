@@ -35,7 +35,10 @@ url = 'https://github.com/mekb-turtle/clipboard'
 name = meson.project_name()
 version = meson.project_version()
 
-dependencies = [dependency('wayland-client')]
+dependencies = [
+    dependency('wayland-client'),
+    dependency('x11')
+]
 dependencies_test = []
 
 # used if you want to install a library
