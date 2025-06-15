@@ -29,8 +29,8 @@ int main(void) {
 	if (copy(false,
 	         (struct copy_data[]) {
 #define TEXT(str) strlen(str), str
-	                 {"image/png", test_png_len, test_png},
-	                 {"text/plain", TEXT("hello world")},
+	                 {"image/png", NULL, test_png_len, test_png},
+	                 {"text/plain", "UTF-8", TEXT("hello world")},
 	                 {0}
     },
 	         &msg, &do_fork, &msg)) {

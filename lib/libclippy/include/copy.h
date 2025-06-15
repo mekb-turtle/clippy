@@ -5,6 +5,7 @@
 
 struct copy_data {
 	char *mime;
+	char *encoding;
 	size_t size;
 	void *data;
 };
