@@ -98,8 +98,7 @@ int copy_x11(char *display_name, bool primary, struct copy_data *data, char **er
 					}
 				}
 				// no matching targets found
-				printf("a\n");
-				XChangeProperty(c.display, requestor, property, request->target, 8, PropModeReplace, 0, 0);
+				property = None;
 			}
 		send_event:
 			XSendEvent(c.display, requestor, False, 0, (XEvent *) &reply);
