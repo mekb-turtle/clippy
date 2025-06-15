@@ -1,4 +1,11 @@
-project('clippy-example', 'c', version: '0.1', license: 'MPL-2.0', subproject_dir: 'lib')
+project(
+    'clippy-example',
+    'c',
+    meson_version: '>=1.8.0',
+    version: '0.1',
+    license: 'MPL-2.0',
+    subproject_dir: 'lib',
+)
 
 src = files('example.c')
 
@@ -11,7 +18,8 @@ version = meson.project_version()
 
 libclippy = subproject('libclippy').get_variable('libclippy_dep')
 
-dependencies = [libclippy]
+# use static for subprojects
+dependencies = [libclippy.as_static()]
 
 # begin meson configuration
 

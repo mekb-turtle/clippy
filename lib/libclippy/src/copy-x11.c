@@ -1,4 +1,4 @@
-#include "copy-x11.h"
+#include "../include/copy-x11.h"
 #include "util.h"
 
 #include <X11/Xlib.h>

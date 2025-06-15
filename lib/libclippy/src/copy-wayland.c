@@ -1,4 +1,4 @@
-#include "copy-wayland.h"
+#include "../include/copy-wayland.h"
 #include "util.h"
 
 #include <string.h>

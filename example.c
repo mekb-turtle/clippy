@@ -1,8 +1,5 @@
 #include "lib/libclippy/include/copy.h"
 
-#include <getopt.h>
-#include <stdint.h>
-#include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
 

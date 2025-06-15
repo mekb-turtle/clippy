@@ -13,7 +13,11 @@ ss.add(files('src' / 'util.h', 'src' / 'copy.c'))
 
 include_dir = 'include'
 
-headers = files(include_dir / 'copy.h', include_dir / 'copy-x11.h', include_dir / 'copy-wayland.h')
+headers = files(
+    include_dir / 'copy.h',
+    include_dir / 'copy-x11.h',
+    include_dir / 'copy-wayland.h',
+)
 ss.add(headers)
 
 system = build_machine.system()
@@ -54,14 +58,17 @@ ssconfig = ss.apply({})
 libdir = get_option('prefix') / get_option('libdir')
 
 install_headers(headers)
-lib = library(
+lib = both_libraries(
     meson.project_name(),
     sources: ssconfig.sources(),
     install: true,
     version: meson.project_version(),
     dependencies: ssconfig.dependencies(),
     install_rpath: libdir,
-    include_directories: include_dir
+    include_directories: include_dir,
 )
 
-libclippy_dep = declare_dependency(include_directories: include_dir, link_with: lib)
+libclippy_dep = declare_dependency(
+    include_directories: include_dir,
+    link_with: lib,
+)

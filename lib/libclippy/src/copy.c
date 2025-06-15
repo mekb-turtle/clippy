@@ -1,13 +1,14 @@
-#include "copy.h"
+#include "../include/copy.h"
 
 #include <stdlib.h>
-#include "copy-wayland.h"
-#include "copy-x11.h"
+#include "../include/copy-wayland.h"
+#include "../include/copy-x11.h"
 
 #define ERR()
 
 int copy(bool primary, struct copy_data *data, char **error_msg, int (*pre_loop_callback)(void *ctx), void *ctx) {
 	char *display_name = NULL;
+
 #ifdef HAS_WAYLAND
 	display_name = getenv("WAYLAND_DISPLAY");
 	if (display_name && *display_name) {
