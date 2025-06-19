@@ -16,10 +16,10 @@ url = 'https://github.com/mekb-turtle/clippy'
 name = meson.project_name()
 version = meson.project_version()
 
-libclippy = subproject('libclippy').get_variable('libclippy_dep')
+libclippy_dep = subproject('libclippy').get_variable('libclippy_dep')
 
 # use static for subprojects
-dependencies = [libclippy.as_static()]
+dependencies = [libclippy_dep.as_static()]
 
 # begin meson configuration
 
