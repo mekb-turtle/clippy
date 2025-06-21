@@ -39,8 +39,8 @@ struct wayland_context {
 	uint32_t dcm_name;
 };
 
-static void registry_global(void *data, struct wl_registry *registry, uint32_t name, const char *interface, uint32_t version) {
-	struct wayland_context *c = data;
+static void registry_global(void *data_, struct wl_registry *registry, uint32_t name, const char *interface, uint32_t version) {
+	struct wayland_context *c = data_;
 	(void) version;
 	// Bind seat and data control manager
 	if (strcmp(interface, "wl_seat") == 0) {
@@ -54,8 +54,8 @@ static void registry_global(void *data, struct wl_registry *registry, uint32_t n
 	}
 }
 
-static void registry_global_remove(void *data, struct wl_registry *registry, uint32_t name) {
-	struct wayland_context *c = data;
+static void registry_global_remove(void *data_, struct wl_registry *registry, uint32_t name) {
+	struct wayland_context *c = data_;
 	(void) registry;
 	(void) name;
 	if (name == c->seat_name && c->seat) wl_seat_destroy(c->seat);
@@ -64,9 +64,9 @@ static void registry_global_remove(void *data, struct wl_registry *registry, uin
 
 static bool running = true;
 
-void data_source_send(void *d, struct zwlr_data_control_source_v1 *source, const char *requested_mime, int32_t fd) {
+void data_source_send(void *data_, struct zwlr_data_control_source_v1 *source, const char *requested_mime, int32_t fd) {
 	(void) source;
-	struct copy_data *data = (struct copy_data *) d;
+	struct copy_data *data = (struct copy_data *) data_;
 	for (struct copy_data *d = data; d->mime && d->data; ++d) {
 		// Find copy data with correct MIME type
 		if (strcmp(d->mime, requested_mime) == 0) {
@@ -77,8 +77,8 @@ void data_source_send(void *d, struct zwlr_data_control_source_v1 *source, const
 	close(fd);
 }
 
-void data_source_cancelled(void *d, struct zwlr_data_control_source_v1 *source) {
-	(void) d;
+void data_source_cancelled(void *data, struct zwlr_data_control_source_v1 *source) {
+	(void) data;
 	(void) source;
 	// Quit listening once another program copies content
 	running = false;
