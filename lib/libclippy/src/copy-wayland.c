@@ -43,11 +43,11 @@ static void registry_global(void *data_, struct wl_registry *registry, uint32_t 
 	struct wayland_context *c = data_;
 	(void) version;
 	// Bind seat and data control manager
-	if (strcmp(interface, "wl_seat") == 0) {
+	if (strcmp(interface, wl_seat_interface.name) == 0) {
 		if (c->seat) wl_seat_destroy(c->seat);
 		c->seat_name = name;
 		c->seat = wl_registry_bind(registry, name, &wl_seat_interface, 2);
-	} else if (strcmp(interface, "zwlr_data_control_manager_v1") == 0) {
+	} else if (strcmp(interface, zwlr_data_control_manager_v1_interface.name) == 0) {
 		if (c->dcm) zwlr_data_control_manager_v1_destroy(c->dcm);
 		c->dcm_name = name;
 		c->dcm = wl_registry_bind(registry, name, &zwlr_data_control_manager_v1_interface, 2);
