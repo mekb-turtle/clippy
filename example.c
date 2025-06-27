@@ -27,12 +27,18 @@ int main(void) {
 	printf("Starting...\n");
 	char *msg = NULL;
 	if (copy(false,
-	         (struct copy_data[]) {
+	         (struct copy_data) {
 #define TEXT(str) strlen(str), str
-	                 {"image/png", NULL, test_png_len, test_png},
-	                 {"text/plain", "UTF-8", TEXT("hello world")},
-	                 {0}
-    },
+// #define COPY_IMAGE
+#ifdef COPY_IMAGE
+	                 COPY_TYPE_IMAGE_PNG,
+	                 test_png_len,
+	                 test_png,
+#else
+	                 COPY_TYPE_TEXT_UTF8,
+	                 TEXT("hello world!"),
+#endif
+	         },
 	         &msg, &do_fork, &msg)) {
 		if (msg == parent_process) return 0;
 		fprintf(stderr, "copy: %s", msg);

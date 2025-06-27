@@ -16,12 +16,17 @@ struct x11_context {
 	Window window;
 	Atom *mime_atoms;
 	size_t mime_atoms_len;
-	size_t mime_atoms_actual_len;
 	long chunk_size;
-	Atom selection, targets, incr, text, utf8;
+	Atom selection, targets, incr, utf8;
 };
 
-int copy_x11(char *display_name, bool primary, struct copy_data *data, char **error_msg, int (*pre_loop_callback)(void *ctx), void *ctx) {
+struct x11_context_incr_context {
+	XSelectionRequestEvent request;
+	size_t pos;
+	struct x11_context_incr_context *next;
+};
+
+int copy_x11(char *display_name, bool primary, struct copy_data data, char **error_msg, int (*pre_loop_callback)(void *ctx), void *ctx) {
 	int res = 0;
 	struct x11_context c = {0};
 
@@ -35,24 +40,29 @@ int copy_x11(char *display_name, bool primary, struct copy_data *data, char **er
 	if (!c.selection) ERR(4, "Failed to get X11 selection");
 
 	c.targets = XInternAtom(c.display, "TARGETS", false);
-	if (!c.targets) ERR(4, "Failed to get TARGETS atom");
+	if (!c.targets) ERR(5, "Failed to get TARGETS atom");
 	c.incr = XInternAtom(c.display, "INCR", false);
-	if (!c.incr) ERR(4, "Failed to get INCR atom");
-	c.text = XInternAtom(c.display, "TEXT", false);
-	if (!c.text) ERR(4, "Failed to get TEXT atom");
+	if (!c.incr) ERR(6, "Failed to get INCR atom");
 	c.utf8 = XInternAtom(c.display, "UTF8_STRING", false);
-	if (!c.utf8) ERR(4, "Failed to get UTF8_STRING atom");
+	if (!c.utf8) ERR(7, "Failed to get UTF8_STRING atom");
 
 	XSetSelectionOwner(c.display, c.selection, c.window, CurrentTime);
-	if (XGetSelectionOwner(c.display, c.selection) != c.window) ERR(1, "Failed to take ownership of selection");
+	if (XGetSelectionOwner(c.display, c.selection) != c.window) ERR(8, "Failed to take ownership of selection");
 
-	c.mime_atoms_actual_len = 0;
-	for (struct copy_data *d = data; d->mime && d->data; ++d) {
-		++c.mime_atoms_actual_len;
-	}
-	// update this to however many encoding atoms are added + 1
-	c.mime_atoms = calloc(c.mime_atoms_actual_len + 4, sizeof(Atom));
+	// must have enough to store the maximum possible number of atoms
+	c.mime_atoms = calloc(4, sizeof(Atom));
+	c.mime_atoms_len = 0;
 	if (!c.mime_atoms) ERR(errno, "Failed to allocate memory");
+
+	c.mime_atoms[c.mime_atoms_len++] = c.targets;
+	if (data.type == COPY_TYPE_TEXT_UTF8) c.mime_atoms[c.mime_atoms_len++] = c.utf8;
+
+	const char *mime = copy_get_mime(data.type);
+	if (mime) {
+		Atom a = XInternAtom(c.display, mime, false);
+		if (!a) ERR(9, "Failed to get atom");
+		c.mime_atoms[c.mime_atoms_len++] = a;
+	}
 
 	if (pre_loop_callback) {
 		res = pre_loop_callback(ctx);
@@ -65,52 +75,32 @@ int copy_x11(char *display_name, bool primary, struct copy_data *data, char **er
 	if (chunk_size) chunk_size /= 4;
 	else
 		chunk_size = 4096; // fallback
-	chunk_size = 1;        // debug, TODO: remove
-
-	// store index for ISO-8859-1/UTF-8 content
-	bool has_utf8 = false;
-	size_t utf8_index;
-	bool has_xa = false;
-	size_t xa_index;
-
-	// detect if UTF-8 content exists, or ISO-8859-1 content exists
-	for (size_t i = 0; i < c.mime_atoms_actual_len; ++i) {
-		if (data[i].encoding) {
-			if (!has_utf8 && (strcasecmp(data[i].encoding, "UTF8") == 0 ||
-			                  strcasecmp(data[i].encoding, "UTF-8") == 0)) {
-				has_utf8 = true;
-				utf8_index = i;
-			}
-			if (!has_xa && strcasecmp(data[i].encoding, "ISO-8859-1") == 0) {
-				has_xa = true;
-				xa_index = i;
-			}
-		}
-	}
 
 	size_t i = 0;
-	// add atoms for encoding targets
-	c.mime_atoms[i++] = c.targets;
-	if (has_utf8) c.mime_atoms[i++] = c.utf8;
-	if (has_xa) {
-		c.mime_atoms[i++] = XA_STRING;
-		c.mime_atoms[i++] = c.text;
-	}
-	size_t mime_start = i;
-	for (size_t j = 0; j < c.mime_atoms_actual_len; ++j) {
-		c.mime_atoms[i++] = XInternAtom(c.display, data[j].mime, false);
-	}
-	c.mime_atoms_len = i;
+
+	struct x11_context_incr_context *incr_head = NULL, *incr_tail = NULL;
 
 	while (1) {
 		XEvent event;
 		XNextEvent(c.display, &event);
 
 		if (event.type == SelectionRequest) {
-			if (event.xselectionrequest.selection != c.selection) continue;
-			if (event.xselectionrequest.display != c.display) continue;
 			XSelectionRequestEvent *request = &event.xselectionrequest;
 			Window requestor = request->requestor;
+			if (!requestor) continue;
+			if (request->selection != c.selection) continue;
+			if (request->display != c.display) continue;
+
+			bool exists = false;
+			for (struct x11_context_incr_context *i = incr_head; i; i = i->next) {
+				if (i->request.requestor == requestor) {
+					exists = true;
+					break;
+				}
+			}
+			// prevent creating duplicate context
+			if (exists) break;
+
 			Atom property = request->property;
 			XSelectionEvent reply = {
 			        .type = SelectionNotify,
@@ -127,38 +117,69 @@ int copy_x11(char *display_name, bool primary, struct copy_data *data, char **er
 				XChangeProperty(c.display, requestor, property, XA_ATOM, 32,
 				                PropModeReplace, (unsigned char *) c.mime_atoms, c.mime_atoms_len);
 			} else {
-				if (has_xa) {
-					if (request->target == XA_STRING || request->target == c.text) {
-						// send the contents of the string type anyway
-						i = xa_index;
-						goto match;
-					}
-				}
-				if (has_utf8) {
-					if (request->target == c.utf8) {
-						i = utf8_index;
-						goto match;
-					}
-				}
-				for (i = 0; i < c.mime_atoms_actual_len; ++i) {
+				for (i = 0; i < c.mime_atoms_len; ++i) {
 					// find matching target
-					if (c.mime_atoms[i + mime_start] == request->target) {
-					match:
-						XChangeProperty(c.display, requestor, property,
-						                request->target, 8, PropModeReplace, data[i].data, data[i].size);
-						goto send_event;
+					if (c.mime_atoms[i] == request->target) {
+						if (data.size > chunk_size) {
+							// send using INCR
+							XChangeProperty(c.display, requestor, property, c.incr, 32, PropModeReplace, 0, 0);
+							XSelectInput(c.display, requestor, PropertyChangeMask);
+
+							struct x11_context_incr_context *ctx = calloc(1, sizeof(struct x11_context_incr_context));
+							if (!ctx) ERR(10, "Failed to allocate memory for INCR context");
+							if (incr_tail) incr_tail->next = ctx;
+							incr_tail = ctx;
+							if (!incr_head) incr_head = ctx;
+
+							ctx->request = *request;
+						} else {
+							XChangeProperty(c.display, requestor, property,
+							                request->target, 8, PropModeReplace, data.data, data.size);
+						}
+						break;
 					}
 				}
 				// no matching targets found
-				property = None;
 			}
-		send_event:
 			XSendEvent(c.display, requestor, False, 0, (XEvent *) &reply);
 		} else if (event.type == SelectionClear) {
 			if (event.xselectionclear.selection != c.selection) continue;
 			if (event.xselectionclear.display != c.display) continue;
 			// Quit once another program copies content
 			if (XGetSelectionOwner(c.display, c.selection) != c.window) break;
+		} else if (event.type == PropertyNotify) {
+			XPropertyEvent *notify = &event.xproperty;
+			if (notify->state != PropertyDelete) continue;
+			Window requestor = notify->window;
+			if (!requestor) continue;
+			if (notify->display != c.display) continue;
+			// linked list of context
+			struct x11_context_incr_context *ctx = NULL, *prev = NULL;
+			for (struct x11_context_incr_context *i = incr_head; i; i = i->next) {
+				if (i->request.requestor == requestor) {
+					ctx = i;
+					break;
+				}
+				prev = i;
+			}
+			if (!ctx) continue; // no context found
+			size_t write_size = chunk_size;
+			if (ctx->pos > data.size - chunk_size)
+				write_size = data.size - ctx->pos;
+			if (ctx->pos < data.size) {
+				// write chunk
+				XChangeProperty(c.display, requestor, ctx->request.property, ctx->request.target, 8, PropModeReplace, data.data + ctx->pos, write_size);
+				ctx->pos += write_size;
+			} else {
+				// transfer finished
+				XChangeProperty(c.display, requestor, ctx->request.property, ctx->request.target, 8, PropModeReplace, 0, 0);
+				// remove from linked list
+				if (prev) prev->next = ctx->next;
+				if (incr_head == ctx) incr_head = ctx->next;
+				if (incr_tail == ctx) incr_tail = prev;
+				free(ctx);
+			}
+			XFlush(c.display);
 		}
 	}
 

@@ -67,13 +67,9 @@ static bool running = true;
 void data_source_send(void *data_, struct zwlr_data_control_source_v1 *source, const char *requested_mime, int32_t fd) {
 	(void) source;
 	struct copy_data *data = (struct copy_data *) data_;
-	for (struct copy_data *d = data; d->mime && d->data; ++d) {
-		// Find copy data with correct MIME type
-		if (strcmp(d->mime, requested_mime) == 0) {
-			write(fd, d->data, d->size);
-			break;
-		}
-	}
+	// Send if MIME type matches
+	if (strcmp(copy_get_mime(data->type), requested_mime) == 0)
+		write(fd, data->data, data->size);
 	close(fd);
 }
 
@@ -84,7 +80,7 @@ void data_source_cancelled(void *data, struct zwlr_data_control_source_v1 *sourc
 	running = false;
 }
 
-int copy_wayland(char *display_name, bool primary, struct copy_data *data, char **error_msg, int (*pre_loop_callback)(void *ctx), void *ctx) {
+int copy_wayland(char *display_name, bool primary, struct copy_data data, char **error_msg, int (*pre_loop_callback)(void *ctx), void *ctx) {
 	int res = 0;
 	struct wayland_context c = {0};
 
@@ -113,14 +109,13 @@ int copy_wayland(char *display_name, bool primary, struct copy_data *data, char 
 	if (!c.source) ERR(7, "Failed to create data source");
 
 	// Offer all MIME types
-	for (struct copy_data *d = data; d->mime && d->data; ++d)
-		zwlr_data_control_source_v1_offer(c.source, d->mime);
+	zwlr_data_control_source_v1_offer(c.source, copy_get_mime(data.type));
 
 	static const struct zwlr_data_control_source_v1_listener data_source_listener = {
 	        .send = data_source_send,
 	        .cancelled = data_source_cancelled,
 	};
-	zwlr_data_control_source_v1_add_listener(c.source, &data_source_listener, data);
+	zwlr_data_control_source_v1_add_listener(c.source, &data_source_listener, &data);
 
 	// Primary or clipboard selection
 	if (primary)
